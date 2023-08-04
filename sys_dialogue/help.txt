@@ -1,0 +1,7 @@
+
+/help ........... print this message
+/exit ........... save conversation and exit
+/new ............ save conversation and start new conversation
+/model .......... change model
+/max_tokens ..... change max_tokens per message
+/correct ........ correct a user message
