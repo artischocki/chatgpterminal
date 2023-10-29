@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import openai
 from typing import Dict
 import os
