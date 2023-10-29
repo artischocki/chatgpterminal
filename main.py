@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-
-import openai
 from typing import Dict
 import os
+import sys
 
+import openai
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import TerminalTrueColorFormatter
@@ -15,10 +14,17 @@ DEFAULT_MODEL = 'gpt-3.5-turbo'
 DEFAULT_ROLE = "You are a helpful assistant."
 
 class Conversation:
-    def __init__(self, model: str = DEFAULT_MODEL, role: str = DEFAULT_ROLE, max_tokens: int = 300) -> None:
+    def __init__(
+            self,
+            model: str = DEFAULT_MODEL,
+            role: str = DEFAULT_ROLE, 
+            max_tokens: int = 1000,
+            stream_responses: bool = True
+            ) -> None:
         self._model = model
         self._role = role
         self._max_tokens = max_tokens
+        self._stream_responses = stream_responses
         # messages are saved in a list that starts with the system instruction
         # of the role
         self._messages = [{"role": "system", "content": self._role}]
@@ -27,15 +33,35 @@ class Conversation:
         self._messages.append({"role": "user", "content": prompt})
         response = self._create_response()
         self._messages.append(response)
-        self._print_message()
+        if not self._stream_responses:
+            self._print_message()
+
 
     def _create_response(self) -> Dict[str, str]:
         response = openai.ChatCompletion.create(
                 model=self._model,
                 max_tokens=self._max_tokens,
-                messages=self._messages
+                messages=self._messages,
+                stream = self._stream_responses
                 )
-        return response.choices[0].message
+        if self._stream_responses:
+            collected_messages = []
+            for chunk in response:
+                try:
+                    content = chunk.choices[0].delta.content
+                except:
+                    content = "\n"
+                print(content, end="")
+                sys.stdout.flush()
+                collected_messages.append(content)
+            message = {
+                    "role": "assistant",
+                    "content": "".join(collected_messages)
+                    }
+            return message
+        else:
+            return response.choices[0].message
+
 
     def _print_message(self, idx: int = -1) -> None:
         # check for code and highlight it
