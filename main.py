@@ -6,7 +6,7 @@ import shutil
 import openai
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name, guess_lexer
-from pygments.formatters import TerminalTrueColorFormatter
+from pygments.formatters import Terminal256Formatter
 
 openai.organization = os.environ.get("MY_OPENAI_ORGANIZATION")
 openai.api_key = os.environ.get("MY_OPENAI_API_KEY")
@@ -68,13 +68,14 @@ class Conversation:
 
                 if not char == "`":
 
-                    # check if end of line -> highlight? 
                     if self._code_mode and not self._reading_language:
+                        # check if end of line -> highlight accumulated line
                         if char != "\n":
                             code_line += char
                         else:
-                            print(highlight(code_line, self._lexer,
-                                        TerminalTrueColorFormatter()), end="")
+                            formatter = Terminal256Formatter(style="material")
+                            highlighted_code_line = highlight(code_line, self._lexer, formatter) 
+                            print(highlighted_code_line, end="")
                             code_line = ""
 
                     if self._found_first_backtick:
@@ -82,18 +83,27 @@ class Conversation:
                         self._toggle_variable_mode()
 
                     if self._reading_language:
+                        # read the language name char by char until \n
+
                         if char == "\n":
-                            print(self._language)
-                            terminal_width = shutil.get_terminal_size().columns
-                            seperators = "─" * terminal_width
-                            print(seperators)
+                            if self._language != "":
+                                print(" ╭" + (len(self._language)+2) * "─" + "╮")
+                                print(" │ " + self._language + " │")
                             try:
                                 self._lexer = get_lexer_by_name(self._language)
                             except:
                                 self._lexer = guess_lexer("")
                             self._reading_language = False
+                            terminal_width = shutil.get_terminal_size().columns
+                            seperators = list("─" * terminal_width)
+                            if self._language != "":
+                                seperators[1] = "┴"
+                                seperators[4+len(self._language)] = "┴"
+                            print("".join(seperators))
                             continue
+
                         self._language += char
+
                     self._found_first_backtick = False
                     self._found_second_backtick = False
                     self._print_char(char)
@@ -114,6 +124,10 @@ class Conversation:
                 if self._code_mode:
                     self._language = ""
                     self._reading_language = True
+                else:
+                    terminal_width = shutil.get_terminal_size().columns
+                    seperators = "─" * terminal_width
+                    print(seperators)
 
                 self._print_char(char)
                 self._found_first_backtick = False
@@ -133,9 +147,6 @@ class Conversation:
 
 
     def _toggle_code_mode(self) -> None:
-        terminal_width = shutil.get_terminal_size().columns
-        seperators = "─" * terminal_width
-        print(seperators)
         self._code_mode = not self._code_mode
 
 
