@@ -1,10 +1,11 @@
-from typing import Dict, List
+from typing import Dict
 import os
 import sys
+import shutil
 
 import openai
 from pygments import highlight
-from pygments.lexers import get_lexer_by_name
+from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.formatters import TerminalTrueColorFormatter
 
 openai.organization = os.environ.get("MY_OPENAI_ORGANIZATION")
@@ -19,12 +20,10 @@ class Conversation:
             model: str = DEFAULT_MODEL,
             role: str = DEFAULT_ROLE, 
             max_tokens: int = 1000,
-            stream_responses: bool = True
             ) -> None:
         self._model = model
         self._role = role
         self._max_tokens = max_tokens
-        self._stream_responses = stream_responses
         # messages are saved in a list that starts with the system instruction
         # of the role
         self._messages = [{"role": "system", "content": self._role}]
@@ -34,78 +33,99 @@ class Conversation:
         self._messages.append({"role": "user", "content": prompt})
         response = self._create_response()
         self._messages.append(response)
-        if not self._stream_responses:
-            self._print_message()
 
 
     def _create_response(self) -> Dict[str, str]:
+
         response = openai.ChatCompletion.create(
                 model=self._model,
                 max_tokens=self._max_tokens,
                 messages=self._messages,
-                stream = self._stream_responses
+                stream = True
                 )
-        if self._stream_responses:
 
-            self._variable_mode = False
-            self._code_mode = False
+        self._variable_mode = False
+        self._code_mode = False
 
-            self._found_first_backtick = False
-            self._found_second_backtick = False
-            
-            collected_content = []
+        self._found_first_backtick = False
+        self._found_second_backtick = False
+        
+        self._reading_language = False
+        self._language = ""
 
-            for chunk in response:
-                try:
-                    content = chunk.choices[0].delta.content
-                except:
-                    content = "\n"
-                chopped_content = [*content]
-                for char in chopped_content:
-                    collected_content.append(char)
-                    if not char == "`":
-                        if self._found_first_backtick:
-                            self._toggle_variable_mode()
-                        self._found_first_backtick = False
-                        self._found_second_backtick = False
-                        self._print_char(char)
-                        continue
-                    if not self._found_first_backtick:
-                        self._found_first_backtick = True
-                        self._print_char(char)
-                        continue
-                    if not self._found_second_backtick:
-                        self._found_second_backtick = True
-                        self._print_char(char)
-                        continue
+        code_line = ""
+
+        collected_content = []
+
+        for chunk in response:
+            try:
+                content = chunk.choices[0].delta.content
+            except:
+                content = "\n"
+            chopped_content = [*content]
+            for char in chopped_content:
+                collected_content.append(char)
+
+                if not char == "`":
+
+                    # check if end of line -> highlight? 
+                    if self._code_mode and not self._reading_language:
+                        if char != "\n":
+                            code_line += char
+                        else:
+                            print(highlight(code_line, self._lexer,
+                                        TerminalTrueColorFormatter()), end="")
+                            code_line = ""
+
+                    if self._found_first_backtick:
+                        # in this case it is at least a variable
+                        self._toggle_variable_mode()
+
+                    if self._reading_language:
+                        if char == "\n":
+                            print(self._language)
+                            terminal_width = shutil.get_terminal_size().columns
+                            seperators = "─" * terminal_width
+                            print(seperators)
+                            try:
+                                self._lexer = get_lexer_by_name(self._language)
+                            except:
+                                self._lexer = guess_lexer("")
+                            self._reading_language = False
+                            continue
+                        self._language += char
                     self._found_first_backtick = False
                     self._found_second_backtick = False
-                    self._toggle_code_mode()
                     self._print_char(char)
+                    continue
 
-                sys.stdout.flush()
-                # print(f"\n{content=}")
-                # mode = self._check_mode(collected_content)
-            message = {
-                    "role": "assistant",
-                    "content": "".join(collected_content)
-                    }
-            return message
-        else:
-            return response.choices[0].message
+                if not self._found_first_backtick:
+                    self._found_first_backtick = True
+                    self._print_char(char)
+                    continue
 
+                if not self._found_second_backtick:
+                    self._found_second_backtick = True
+                    self._print_char(char)
+                    continue
 
-    def _print_char(self, char: str) -> None:
-        if char == "`":
-            return
-        if self._code_mode:
-            print(char, end="")
-            return
-        if self._variable_mode:
-            # print with inverted colors
-            print(f"\033[7m{char}\033[0m", end="")
-            return
-        print(char, end="")
+                self._toggle_code_mode()
+
+                if self._code_mode:
+                    self._language = ""
+                    self._reading_language = True
+
+                self._print_char(char)
+                self._found_first_backtick = False
+                self._found_second_backtick = False
+
+            sys.stdout.flush()
+
+        message = {
+                "role": "assistant",
+                "content": "".join(collected_content)
+                }
+        return message
 
 
     def _toggle_variable_mode(self) -> None:
@@ -113,6 +133,9 @@ class Conversation:
 
 
     def _toggle_code_mode(self) -> None:
+        terminal_width = shutil.get_terminal_size().columns
+        seperators = "─" * terminal_width
+        print(seperators)
         self._code_mode = not self._code_mode
 
 
@@ -120,34 +143,19 @@ class Conversation:
         self._language = language
 
 
-    def _check_for_code(cls, joined_strings: str) -> bool:
-        # this functions checks the last two strings for:
-        # triple backticks + language name -> beginning of code
-        # triple backticks -> end of code / beginning of pseudocode
-        # one backtick -> variable
-        count = 0
-        for char in joined_strings:
-            if not char == '`':
-                continue
-            count += 1
-            if count == 3:
-                return True
-        return False
-
-    
-
-
-
-
-    @classmethod
-    def _check_mode(cls, collected_content: List, current_mode: str) -> str:
-        if current_mode == "normal":
-            if collected_content[-1] == "```":
-                return "code_start"
-        if current_mode == "code_start":
-            if collected_content[-1] != "\n":
-                # return language name
-                return collected_content[-1]
+    def _print_char(self, char: str) -> None:
+        if char == "`":
+            return
+        if self._reading_language:
+            return
+        if self._code_mode:
+            # print(char, end="")
+            return
+        if self._variable_mode:
+            # print with inverted colors
+            print(f"\033[7m{char}\033[0m", end="")
+            return
+        print(char, end="")
 
 
     def _print_message(self, idx: int = -1) -> None:
