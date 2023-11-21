@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import os
 import sys
 
@@ -29,6 +29,7 @@ class Conversation:
         # of the role
         self._messages = [{"role": "system", "content": self._role}]
 
+
     def new_user_message(self, prompt: str) -> None:
         self._messages.append({"role": "user", "content": prompt})
         response = self._create_response()
@@ -45,22 +46,108 @@ class Conversation:
                 stream = self._stream_responses
                 )
         if self._stream_responses:
-            collected_messages = []
+
+            self._variable_mode = False
+            self._code_mode = False
+
+            self._found_first_backtick = False
+            self._found_second_backtick = False
+            
+            collected_content = []
+
             for chunk in response:
                 try:
                     content = chunk.choices[0].delta.content
                 except:
                     content = "\n"
-                print(content, end="")
+                chopped_content = [*content]
+                for char in chopped_content:
+                    collected_content.append(char)
+                    if not char == "`":
+                        if self._found_first_backtick:
+                            self._toggle_variable_mode()
+                        self._found_first_backtick = False
+                        self._found_second_backtick = False
+                        self._print_char(char)
+                        continue
+                    if not self._found_first_backtick:
+                        self._found_first_backtick = True
+                        self._print_char(char)
+                        continue
+                    if not self._found_second_backtick:
+                        self._found_second_backtick = True
+                        self._print_char(char)
+                        continue
+                    self._found_first_backtick = False
+                    self._found_second_backtick = False
+                    self._toggle_code_mode()
+                    self._print_char(char)
+
                 sys.stdout.flush()
-                collected_messages.append(content)
+                # print(f"\n{content=}")
+                # mode = self._check_mode(collected_content)
             message = {
                     "role": "assistant",
-                    "content": "".join(collected_messages)
+                    "content": "".join(collected_content)
                     }
             return message
         else:
             return response.choices[0].message
+
+
+    def _print_char(self, char: str) -> None:
+        if char == "`":
+            return
+        if self._code_mode:
+            print(char, end="")
+            return
+        if self._variable_mode:
+            # print with inverted colors
+            print(f"\033[7m{char}\033[0m", end="")
+            return
+        print(char, end="")
+
+
+    def _toggle_variable_mode(self) -> None:
+        self._variable_mode = not self._variable_mode
+
+
+    def _toggle_code_mode(self) -> None:
+        self._code_mode = not self._code_mode
+
+
+    def _set_language(self, language: str) -> None:
+        self._language = language
+
+
+    def _check_for_code(cls, joined_strings: str) -> bool:
+        # this functions checks the last two strings for:
+        # triple backticks + language name -> beginning of code
+        # triple backticks -> end of code / beginning of pseudocode
+        # one backtick -> variable
+        count = 0
+        for char in joined_strings:
+            if not char == '`':
+                continue
+            count += 1
+            if count == 3:
+                return True
+        return False
+
+    
+
+
+
+
+    @classmethod
+    def _check_mode(cls, collected_content: List, current_mode: str) -> str:
+        if current_mode == "normal":
+            if collected_content[-1] == "```":
+                return "code_start"
+        if current_mode == "code_start":
+            if collected_content[-1] != "\n":
+                # return language name
+                return collected_content[-1]
 
 
     def _print_message(self, idx: int = -1) -> None:
@@ -98,6 +185,7 @@ class Conversation:
     @property
     def model(self):
         return self._model
+
     @model.setter
     def model(self, value):
         self._model = value
@@ -105,6 +193,7 @@ class Conversation:
     @property
     def max_tokens(self):
         return self._max_tokens
+
     @max_tokens.setter
     def max_tokens(self, value):
         self._max_tokens = value
