@@ -2,7 +2,7 @@ import os
 
 from colorama import Fore, Back, Style
 
-from conversation import Conversation
+from .conversation import Conversation
 
 
 def system_dialogue(user_input: str, conversation: Conversation):

@@ -3,10 +3,10 @@ import os
 
 import openai
 
-from message import Message, Prompt, Response
+from .message import Message, Prompt, Response
 
-openai.organization = os.environ.get("MY_OPENAI_ORGANIZATION")
-openai.api_key = os.environ.get("MY_OPENAI_API_KEY")
+openai.organization = os.environ.get("OPENAI_ORGANIZATION")
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 DEFAULT_MODEL = 'gpt-3.5-turbo'
 
