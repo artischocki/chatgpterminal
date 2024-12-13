@@ -49,10 +49,10 @@ def system_dialogue(user_input: str, conversation: Conversation):
 
 def main():
     conversation = Conversation()
-    user_prompt = Back.BLUE + Fore.BLACK + " You " \
-                + Back.BLACK + Fore.BLUE + "\ue0b0 " + Style.RESET_ALL
-    gpt_prompt = Back.GREEN + Fore.BLACK + " GPT " \
-               + Back.BLACK + Fore.GREEN + "\ue0b0 " + Style.RESET_ALL
+    user_prompt = Back.BLUE + Fore.BLACK + " You " + Style.RESET_ALL \
+            + Fore.BLUE + "\ue0b0 " + Style.RESET_ALL
+    gpt_prompt = Back.GREEN + Fore.BLACK + " GPT " + Style.RESET_ALL \
+            + Fore.GREEN + "\ue0b0 " + Style.RESET_ALL
     try:
         while True:
             print()
